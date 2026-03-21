@@ -1,0 +1,121 @@
+name: Build And Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: '1.25.0'
+  NODE_VERSION: '20'
+  WAILS_VERSION: 'v2.11.0'
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            label: windows-amd64
+            archive: zip
+            artifact_name: modpack-inspector-windows-amd64
+            output_path: build/bin/modpack-inspector.exe
+          - os: ubuntu-24.04
+            label: linux-amd64
+            archive: tar.gz
+            artifact_name: modpack-inspector-linux-amd64
+            output_path: build/bin/modpack-inspector
+          - os: macos-14
+            label: macos-arm64
+            archive: tar.gz
+            artifact_name: modpack-inspector-macos-arm64
+            output_path: build/bin/modpack-inspector.app
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Set up MinGW on Windows
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+
+      - name: Build application
+        shell: bash
+        env:
+          CGO_ENABLED: '1'
+          CC: ${{ runner.os == 'Windows' && 'C:/msys64/ucrt64/bin/gcc.exe' || runner.os == 'macOS' && 'clang' || 'gcc' }}
+        run: |
+          "$(go env GOPATH)/bin/wails" build -clean
+
+      - name: Package Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "${{ matrix.output_path }}" -DestinationPath "${{ matrix.artifact_name }}.zip"
+
+      - name: Package Unix build
+        if: runner.os != 'Windows'
+        run: |
+          tar -czf "${{ matrix.artifact_name }}.tar.gz" "${{ matrix.output_path }}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}.${{ matrix.archive }}
+          if-no-files-found: error
+
+  release:
+    name: Publish Release Assets
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*
+          generate_release_notes: true

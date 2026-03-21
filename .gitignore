@@ -1,0 +1,12 @@
+build/bin/
+frontend/node_modules/
+frontend/dist/
+
+# Common local noise
+*.log
+*.tmp
+*.swp
+*.swo
+*.exe~
+.DS_Store
+Thumbs.db
