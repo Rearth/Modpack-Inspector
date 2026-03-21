@@ -5,7 +5,7 @@ by AI-Models (mostly claude opus 4.6 and chatgpt 5.4). I am not a frontend devel
 Use this tool at your own risk. Based on my testing, it does what's expected, but I'm not promising anything. I spent about
 2 full days on this for the initial version, with multiple iterations, improvements and lots of input and guidance to the AI, but the code itself is written by the AI. 
 
-> This does not mean my minecraft mods will be coded from now on (I actually enjoy the java coding process of it).
+> This does not mean my minecraft mods will be vibe coded from now on, I actually enjoy writing the java code.
 
 ## Overview
 
@@ -14,6 +14,11 @@ Modpack Inspector is a desktop application for inspecting and debugging Minecraf
 It scans the mods in a selected instance, extracts metadata and dependency information from each JAR, enriches that data with Modrinth and CurseForge when available, and presents the result in a searchable desktop UI built with Wails.
 
 The goal is to make modpack maintenance faster: you can see what is installed, how mods depend on each other, which libraries are unused, which config files likely belong to which mods, and where unresolved dependencies are coming from.
+
+<img width="1397" height="899" alt="Screenshot 2026-03-21 175156" src="https://github.com/user-attachments/assets/8b5bdbef-e353-45ad-8dfe-8a549900c726" />
+<img width="1395" height="896" alt="Screenshot 2026-03-21 175050" src="https://github.com/user-attachments/assets/a14da78e-5fee-486b-b582-bd838ebce5f3" />
+<img width="1396" height="895" alt="Screenshot 2026-03-21 175121" src="https://github.com/user-attachments/assets/993f4159-3b81-49b6-a5f0-792d2b58731c" />
+
 
 ## What The Tool Does
 
