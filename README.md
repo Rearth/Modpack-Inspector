@@ -209,8 +209,27 @@ You need:
 - Go 1.25+
 - Node.js with npm
 - Wails CLI v2
+- a working C toolchain, because `onnxruntime_go` uses CGO
 
-On Windows, this repo also needs a working C toolchain because `onnxruntime_go` uses CGO.
+Platform notes:
+
+- Windows: MinGW-w64 / GCC or another working Windows C toolchain
+- Linux: GTK 3 and WebKitGTK development packages
+- macOS: Xcode Command Line Tools (`xcode-select --install`)
+
+Example Linux packages:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential libgtk-3-dev libwebkit2gtk-4.0-dev
+```
+
+Example macOS bootstrap:
+
+```bash
+xcode-select --install
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+```
 
 Known working setup in this workspace:
 
@@ -232,11 +251,18 @@ Install the Wails CLI if needed:
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 ```
 
+On Linux and macOS, the default compiler on your PATH is usually enough:
+
+```bash
+export CGO_ENABLED=1
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+```
+
 ### Install Dependencies
 
 From the project root:
 
-```powershell
+```bash
 cd modpacktool
 npm --prefix frontend install
 ```
@@ -247,7 +273,7 @@ Or let Wails install the frontend dependencies automatically on first run.
 
 Standard development flow:
 
-```powershell
+```bash
 cd modpacktool
 wails dev
 ```
@@ -257,6 +283,10 @@ That starts:
 - the Go backend
 - the Vite dev server
 - the desktop app shell
+
+On Linux, `wails dev` still depends on the GTK/WebKit packages above.
+
+On macOS, Wails uses the system toolchain from Xcode Command Line Tools.
 
 ### Browser Live Preview
 
@@ -272,20 +302,20 @@ That is useful when you want to inspect the frontend quickly in a browser while 
 
 Run tests:
 
-```powershell
+```bash
 go test ./...
 ```
 
 Build the frontend only:
 
-```powershell
+```bash
 cd frontend
 npm run build
 ```
 
 Build the desktop app:
 
-```powershell
+```bash
 wails build
 ```
 
