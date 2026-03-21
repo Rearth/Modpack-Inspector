@@ -59,6 +59,20 @@ That lets the app distinguish between:
 - dependencies that are still unresolved
 - unresolved online-only dependencies that could not be matched locally
 
+### Library Detection
+
+The app also computes a `detected library` flag used by the Mods view, the dependency graph, and the unused-library report.
+
+This flag is heuristic, not authoritative metadata from the mod host.
+
+The current logic is:
+
+- if online metadata marks a mod only as `library` or `api and library`, it is treated as a detected library
+- if those library tags are mixed with other tags, the app uses embedding similarity on the mod description to decide whether it looks more like shared code or more like a content mod
+- if the model is unavailable, the app falls back to a very narrow shared-code description heuristic
+
+This is intentionally conservative because many gameplay mods also carry `API and Library` categories even when they are not actually shared-core dependencies.
+
 ### Mixin Inspection
 
 Modpack Inspector extracts mixin information directly from mod JARs by parsing mixin config JSON files and the Java class bytecode of each mixin class.
@@ -161,7 +175,8 @@ In the Mods view you can:
 
 - search for mods with the smart search bar
 - filter by category
-- inspect libraries and unused libraries
+- filter by the `Detected Library` pill directly from mod cards
+- inspect detected libraries and unused libraries
 - click a mod card to open its details
 
 Inside the mod detail view you can:

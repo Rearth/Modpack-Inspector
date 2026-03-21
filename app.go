@@ -37,11 +37,24 @@ type App struct {
 	configDir string
 
 	scanGen atomic.Uint64 // incremented on each scan start; checked to abort stale scans
+
+	libraryClassifierOnce    sync.Once
+	libraryPositiveVecs      [][]float64
+	libraryNegativeVecs      [][]float64
+	mixedTagLibraryThreshold float64
+	noTagLibraryThreshold    float64
 }
+
+const (
+	defaultMixedTagLibraryThreshold = 0.18
+	defaultNoTagLibraryThreshold    = 0.26
+)
 
 func NewApp() *App {
 	return &App{
-		embeds: embeddings.NewEngine(),
+		embeds:                   embeddings.NewEngine(),
+		mixedTagLibraryThreshold: defaultMixedTagLibraryThreshold,
+		noTagLibraryThreshold:    defaultNoTagLibraryThreshold,
 	}
 }
 
@@ -67,6 +80,7 @@ func (a *App) startup(ctx context.Context) {
 	// Load settings and initialize API clients
 	settings, _ := a.db.GetSettings()
 	cacheTTL := 24 * time.Hour
+	a.applyLibraryDetectionSettings(settings)
 
 	a.cfClient = api.NewCurseForgeClient(settings.CurseForgeAPIKey, a.db, cacheTTL)
 	a.mrClient = api.NewModrinthClient(settings.ModrinthAPIKey, a.db, cacheTTL)
@@ -266,29 +280,346 @@ func (a *App) enrichMod(mod *db.Mod, manifestDeps []db.Dependency) []db.Dependen
 			}
 		}
 		mod.Categories = strings.Join(unique, ",")
+	}
 
-		// Detect library from categories — only mark as library if it has the
-		// "library" category and no content/gameplay categories (avoids flagging
-		// utility mods like EMI that also provide an API)
-		hasLibraryCat := false
-		hasContentCat := false
-		for _, c := range unique {
-			switch strings.ToLower(c) {
-			case "library":
-				hasLibraryCat = true
-			case "adventure", "cursed", "decoration", "economy", "equipment",
-				"food", "game-mechanics", "magic", "management", "minigame",
-				"mobs", "optimization", "social", "storage", "technology",
-				"transportation", "utility", "worldgen":
-				hasContentCat = true
-			}
-		}
-		if hasLibraryCat && !hasContentCat {
+	// Library classification: global manual override takes precedence, then auto-detect
+	if override, _ := a.db.GetLibraryOverride(mod.ID); override != 0 {
+		mod.LibraryOverride = override
+		mod.IsLibrary = override == 1
+	} else if mod.Categories != "" {
+		cats := splitNonEmpty(mod.Categories)
+		if a.evaluateLibraryDetection(cats, mod.Name, mod.ID, mod.Description, mod.OnlineDesc).Detected {
 			mod.IsLibrary = true
 		}
 	}
 
 	return deps
+}
+
+var libraryPositivePrompts = []string{
+	"shared code library dependency required by other minecraft mods",
+	"developer api and framework providing hooks for minecraft modding",
+	"core library providing reusable utility code for mod developers",
+	"compatibility and abstraction layer library for minecraft mods",
+}
+
+var libraryNegativePrompts = []string{
+	"standalone gameplay mod with new items blocks and progression for players",
+	"player-facing adventure mod with quests exploration and rpg elements",
+	"building and decoration mod adding cosmetic blocks and furniture",
+	"technology and automation mod with machines energy and industrial systems",
+	"world generation mod creating new biomes terrain and structures to explore",
+	"combat and weapons mod adding new player abilities and equipment",
+}
+
+func (a *App) detectLibrary(categories []string, texts ...string) bool {
+	return a.evaluateLibraryDetection(categories, texts...).Detected
+}
+
+type LibraryDetectionDebug struct {
+	Detected                     bool    `json:"detected"`
+	HasLibraryTag                bool    `json:"hasLibraryTag"`
+	HasOnlyLibraryTags           bool    `json:"hasOnlyLibraryTags"`
+	ContentTagCount              int     `json:"contentTagCount"`
+	UsedSemantic                 bool    `json:"usedSemantic"`
+	SemanticConfidence           float64 `json:"semanticConfidence"`
+	PositiveSimilarity           float64 `json:"positiveSimilarity"`
+	NegativeSimilarity           float64 `json:"negativeSimilarity"`
+	Threshold                    float64 `json:"threshold"`
+	UsedStrongDescription        bool    `json:"usedStrongDescription"`
+	DescriptionHasLibraryKeyword bool    `json:"descriptionHasLibraryKeyword"`
+	ManualOverride               int     `json:"manualOverride"`
+	Reason                       string  `json:"reason"`
+}
+
+func (a *App) evaluateLibraryDetection(categories []string, texts ...string) LibraryDetectionDebug {
+	semanticConfidence, positiveSimilarity, negativeSimilarity, hasSemanticConfidence := a.librarySemanticConfidence(texts...)
+	return evaluateLibraryDetectionWithThresholds(categories, semanticConfidence, positiveSimilarity, negativeSimilarity, hasSemanticConfidence, a.mixedTagLibraryThreshold, a.noTagLibraryThreshold, texts...)
+}
+
+func evaluateLibraryDetectionWithThresholds(categories []string, semanticConfidence, positiveSimilarity, negativeSimilarity float64, hasSemanticConfidence bool, mixedTagThreshold, noTagThreshold float64, texts ...string) LibraryDetectionDebug {
+	hasLibraryTag, contentTagCount := analyzeLibraryCategories(categories)
+	strongDesc := hasStrongLibraryDescription(texts...)
+	descKeyword := descriptionMentionsLibrary(texts...)
+
+	debug := LibraryDetectionDebug{
+		HasLibraryTag:                hasLibraryTag,
+		HasOnlyLibraryTags:           hasLibraryTag && contentTagCount == 0,
+		ContentTagCount:              contentTagCount,
+		UsedStrongDescription:        strongDesc,
+		DescriptionHasLibraryKeyword: descKeyword,
+	}
+
+	// Pure library tags (no content tags) → hard positive
+	if hasLibraryTag && contentTagCount == 0 {
+		debug.Detected = true
+		debug.Reason = "pure-library-tags"
+		return debug
+	}
+
+	// Narrow strong description → detected regardless of tags
+	if strongDesc {
+		debug.Detected = true
+		debug.Reason = "strong-description"
+	}
+
+	// Library tag + description mentions library keyword → detected
+	if hasLibraryTag && descKeyword && !debug.Detected {
+		debug.Detected = true
+		debug.Reason = "tagged-library-description"
+	}
+
+	// Semantic check
+	debug.UsedSemantic = hasSemanticConfidence
+	debug.SemanticConfidence = semanticConfidence
+	debug.PositiveSimilarity = positiveSimilarity
+	debug.NegativeSimilarity = negativeSimilarity
+
+	if hasSemanticConfidence {
+		debug.Threshold = noTagThreshold
+		if hasLibraryTag {
+			debug.Threshold = mixedTagThreshold
+		}
+		if semanticConfidence >= debug.Threshold {
+			debug.Detected = true
+			if debug.Reason == "" {
+				debug.Reason = "semantic-match"
+			}
+		} else if debug.Reason == "" {
+			debug.Reason = "semantic-below-threshold"
+		}
+		return debug
+	}
+
+	if debug.Reason == "" {
+		debug.Reason = "no-model-no-match"
+	}
+	return debug
+}
+
+// neutralCategoryTags are tags that don't indicate content — they're compatible with being a library.
+var neutralCategoryTags = map[string]bool{
+	"utility":             true,
+	"server utility":      true,
+	"utility & qol":       true,
+	"miscellaneous":       true,
+	"addons":              true,
+	"management":          true,
+	"education":           true,
+	"kubejs":              true,
+	"map and information": true,
+}
+
+func analyzeLibraryCategories(categories []string) (hasLibraryTag bool, contentTagCount int) {
+	for _, category := range categories {
+		normalized := strings.ToLower(strings.TrimSpace(category))
+		if normalized == "" {
+			continue
+		}
+		switch normalized {
+		case "api & library", "api and library", "libraries", "library":
+			hasLibraryTag = true
+		default:
+			if !neutralCategoryTags[normalized] {
+				contentTagCount++
+			}
+		}
+	}
+	return
+}
+
+func (a *App) librarySemanticConfidence(texts ...string) (float64, float64, float64, bool) {
+	if a == nil || a.embeds == nil || !a.embeds.IsAvailable() {
+		return 0, 0, 0, false
+	}
+
+	text := joinNonEmpty(texts...)
+	if text == "" {
+		return 0, 0, 0, false
+	}
+
+	a.initLibraryClassifier()
+	if len(a.libraryPositiveVecs) == 0 || len(a.libraryNegativeVecs) == 0 {
+		return 0, 0, 0, false
+	}
+
+	textVec := a.embeds.Embed(text)
+	if len(textVec) == 0 {
+		return 0, 0, 0, false
+	}
+
+	positive := maxCosineSimilarity(textVec, a.libraryPositiveVecs)
+	negative := maxCosineSimilarity(textVec, a.libraryNegativeVecs)
+	return positive - negative, positive, negative, true
+}
+
+func (a *App) applyLibraryDetectionSettings(settings *db.Settings) {
+	if settings == nil {
+		a.mixedTagLibraryThreshold = defaultMixedTagLibraryThreshold
+		a.noTagLibraryThreshold = defaultNoTagLibraryThreshold
+		return
+	}
+	a.mixedTagLibraryThreshold = clampLibraryThreshold(settings.MixedTagLibraryThreshold, defaultMixedTagLibraryThreshold)
+	a.noTagLibraryThreshold = clampLibraryThreshold(settings.NoTagLibraryThreshold, defaultNoTagLibraryThreshold)
+}
+
+// SetLibraryOverride sets a manual library detection override for a mod.
+// override: 1 = force library, -1 = force not library, 0 = auto-detect.
+func (a *App) SetLibraryOverride(modID string, override int) error {
+	if override < -1 || override > 1 {
+		return fmt.Errorf("invalid override value: must be -1, 0, or 1")
+	}
+	if a.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+	if err := a.db.SetLibraryOverride(modID, override); err != nil {
+		return err
+	}
+	if err := a.db.UpdateModLibraryOverride(modID, override); err != nil {
+		return err
+	}
+	if override != 0 {
+		if err := a.db.UpdateModIsLibrary(modID, override == 1); err != nil {
+			return err
+		}
+	} else {
+		mod, err := a.db.GetModByID(modID)
+		if err == nil && mod != nil {
+			cats := splitNonEmpty(mod.Categories)
+			detected := a.evaluateLibraryDetection(cats, mod.Name, mod.ID, mod.Description, mod.OnlineDesc).Detected
+			if err := a.db.UpdateModIsLibrary(modID, detected); err != nil {
+				return err
+			}
+		}
+	}
+	runtime.EventsEmit(a.ctx, "mods:updated")
+	return nil
+}
+
+func clampLibraryThreshold(value, fallback float64) float64 {
+	if value <= 0 {
+		value = fallback
+	}
+	if value < 0.01 {
+		return 0.01
+	}
+	if value > 0.95 {
+		return 0.95
+	}
+	return value
+}
+
+func (a *App) initLibraryClassifier() {
+	a.libraryClassifierOnce.Do(func() {
+		if a == nil || a.embeds == nil || !a.embeds.IsAvailable() {
+			return
+		}
+		for _, prompt := range libraryPositivePrompts {
+			vec := a.embeds.Embed(prompt)
+			if len(vec) > 0 {
+				a.libraryPositiveVecs = append(a.libraryPositiveVecs, vec)
+			}
+		}
+		for _, prompt := range libraryNegativePrompts {
+			vec := a.embeds.Embed(prompt)
+			if len(vec) > 0 {
+				a.libraryNegativeVecs = append(a.libraryNegativeVecs, vec)
+			}
+		}
+	})
+}
+
+func maxCosineSimilarity(target []float64, candidates [][]float64) float64 {
+	best := -1.0
+	for _, candidate := range candidates {
+		score := embeddings.CosineSimilarity(target, candidate)
+		if score > best {
+			best = score
+		}
+	}
+	if best < 0 {
+		return 0
+	}
+	return best
+}
+
+func joinNonEmpty(parts ...string) string {
+	filtered := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			filtered = append(filtered, part)
+		}
+	}
+	return strings.Join(filtered, " ")
+}
+
+func hasStrongLibraryDescription(texts ...string) bool {
+	combined := strings.ToLower(joinNonEmpty(texts...))
+	for _, phrase := range []string{
+		"library containing",
+		"shared code",
+		"shared library",
+		"common code",
+		"core library",
+		"reused between mods",
+		"for other mods",
+		"provides code, frameworks, and utilities for minecraft mods",
+	} {
+		if strings.Contains(combined, phrase) {
+			return true
+		}
+	}
+
+	if strings.Contains(combined, "provides code") && strings.Contains(combined, "framework") && strings.Contains(combined, "mods") {
+		return true
+	}
+	if strings.Contains(combined, "library mod providing") {
+		return true
+	}
+	if strings.Contains(combined, "open source library") || strings.Contains(combined, "opensource library") {
+		return true
+	}
+
+	return false
+}
+
+// descriptionMentionsLibrary returns true if the combined texts contain library-related keywords.
+// This is broader than hasStrongLibraryDescription and is designed to be used in combination
+// with a library tag presence check.
+func descriptionMentionsLibrary(texts ...string) bool {
+	combined := strings.ToLower(joinNonEmpty(texts...))
+	if strings.Contains(combined, "library") {
+		return true
+	}
+	if containsWord(combined, "lib") || containsWord(combined, "api") {
+		return true
+	}
+	// Compound words ending in "lib" or "api" (e.g. SmartBrainLib, lionfishapi)
+	for _, w := range strings.Fields(combined) {
+		if strings.HasSuffix(w, "lib") || strings.HasSuffix(w, "api") {
+			return true
+		}
+	}
+	return false
+}
+
+func containsWord(text, word string) bool {
+	for i := 0; i <= len(text)-len(word); i++ {
+		if text[i:i+len(word)] != word {
+			continue
+		}
+		before := i == 0 || !isAlphanumeric(text[i-1])
+		after := i+len(word) == len(text) || !isAlphanumeric(text[i+len(word)])
+		if before && after {
+			return true
+		}
+	}
+	return false
+}
+
+func isAlphanumeric(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
 func onlineDepsForMod(modID string, online []api.OnlineDep) []db.Dependency {
@@ -587,6 +918,16 @@ func (a *App) GetModDetail(modID string) (*ModDetail, error) {
 	configs, _ := a.db.GetConfigMappingsByModID(modID)
 	mods, _ := a.db.GetAllMods()
 	visibleDeps, unresolvedExternal := buildDetailDependencies(modID, deps, mods)
+	libraryDetection := a.evaluateLibraryDetection(splitNonEmpty(mod.Categories), mod.Name, mod.ID, mod.Description, mod.OnlineDesc)
+	libraryDetection.ManualOverride = mod.LibraryOverride
+	if mod.LibraryOverride != 0 {
+		libraryDetection.Detected = mod.LibraryOverride == 1
+		if mod.LibraryOverride == 1 {
+			libraryDetection.Reason = "manual-override-library"
+		} else {
+			libraryDetection.Reason = "manual-override-not-library"
+		}
+	}
 
 	// Build mixin data
 	rawMixins, _ := a.db.GetMixinsByModID(modID)
@@ -599,6 +940,7 @@ func (a *App) GetModDetail(modID string) (*ModDetail, error) {
 		Dependencies:       visibleDeps,
 		Configs:            configs,
 		ProvidedModules:    splitProvidedModules(mod.ProvidedIDs),
+		LibraryDetection:   libraryDetection,
 		UnresolvedExternal: unresolvedExternal,
 		Mixins:             mixinDetails,
 		IncomingMixins:     incomingDetails,
@@ -611,6 +953,7 @@ type ModDetail struct {
 	Dependencies       []DetailDependency          `json:"dependencies"`
 	Configs            []db.ConfigMapping          `json:"configs"`
 	ProvidedModules    []string                    `json:"providedModules"`
+	LibraryDetection   LibraryDetectionDebug       `json:"libraryDetection"`
 	UnresolvedExternal []UnresolvedExternalDepLink `json:"unresolvedExternal,omitempty"`
 	Mixins             []MixinDetail               `json:"mixins,omitempty"`
 	IncomingMixins     []IncomingMixin             `json:"incomingMixins,omitempty"`
@@ -1019,6 +1362,7 @@ func (a *App) SaveSettings(settings db.Settings) error {
 	cacheTTL := 24 * time.Hour
 	a.cfClient = api.NewCurseForgeClient(settings.CurseForgeAPIKey, a.db, cacheTTL)
 	a.mrClient = api.NewModrinthClient(settings.ModrinthAPIKey, a.db, cacheTTL)
+	a.applyLibraryDetectionSettings(&settings)
 	a.setInstanceDirs(settings.InstancePath)
 
 	if instanceChanged {

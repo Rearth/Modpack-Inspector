@@ -22,9 +22,10 @@ export default function App() {
   const [setupChecked, setSetupChecked] = useState(false);
   const [instanceName, setInstanceName] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [showDetectedLibrariesOnly, setShowDetectedLibrariesOnly] = useState(false);
   const [showUnusedOnly, setShowUnusedOnly] = useState(false);
 
-  const { mods, loading, scanStatus, scanProgress, unusedLibraries } = useMods();
+  const { mods, loading, scanStatus, scanProgress, unusedLibraries, refresh } = useMods();
   const { query, setQuery, results, searching } = useSearch();
   const config = useConfig();
 
@@ -44,17 +45,22 @@ export default function App() {
 
   // Apply search + filters
   const displayMods = useMemo(() => {
-    let list: Mod[] = query ? results.map(r => r.mod) : mods;
+    let list: Mod[] = query
+      ? results.map(r => mods.find(m => m.id === r.mod.id) ?? r.mod)
+      : mods;
     if (categoryFilter) {
       list = list.filter(m =>
         m.categories?.toLowerCase().split(',').some(c => c.trim() === categoryFilter.toLowerCase())
       );
     }
+    if (showDetectedLibrariesOnly) {
+      list = list.filter(m => m.isLibrary);
+    }
     if (showUnusedOnly) {
       list = list.filter(m => unusedLibraries.includes(m.id));
     }
     return list;
-  }, [query, results, mods, categoryFilter, showUnusedOnly, unusedLibraries]);
+  }, [query, results, mods, categoryFilter, showDetectedLibrariesOnly, showUnusedOnly, unusedLibraries]);
 
   const selectedMod = mods.find(m => m.id === selectedModId);
 
@@ -98,6 +104,10 @@ export default function App() {
     setCategoryFilter(prev => prev === cat ? '' : cat);
   }, []);
 
+  const handleDetectedLibraryFilter = useCallback(() => {
+    setShowDetectedLibrariesOnly(prev => !prev);
+  }, []);
+
   return (
     <div className="flex h-screen flex-col bg-[radial-gradient(circle_at_top_left,_rgba(52,211,153,0.06),_transparent_28%),linear-gradient(180deg,_#fbfefd_0%,_#f8fafc_100%)] text-gray-900 overflow-hidden">
       <TitleBar instanceName={instanceName} />
@@ -138,7 +148,7 @@ export default function App() {
               </div>
 
               {/* Active filters */}
-              {(categoryFilter || showUnusedOnly) && (
+              {(categoryFilter || showDetectedLibrariesOnly || showUnusedOnly) && (
                 <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                   {showUnusedOnly && (
                     <button
@@ -146,6 +156,14 @@ export default function App() {
                       className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-medium hover:bg-emerald-200 transition-colors"
                     >
                       Unused Libraries ×
+                    </button>
+                  )}
+                  {showDetectedLibrariesOnly && (
+                    <button
+                      onClick={() => setShowDetectedLibrariesOnly(false)}
+                      className="text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 font-medium hover:bg-slate-300 transition-colors"
+                    >
+                      Detected Library ×
                     </button>
                   )}
                   {categoryFilter && (
@@ -186,7 +204,9 @@ export default function App() {
                   unusedLibraries={unusedLibraries}
                   scanStatus={scanStatus}
                   onCategoryFilter={handleCategoryFilter}
+                  onDetectedLibraryFilter={handleDetectedLibraryFilter}
                   categoryFilter={categoryFilter}
+                  detectedLibraryFilter={showDetectedLibrariesOnly}
                 />
               </div>
 
@@ -209,6 +229,7 @@ export default function App() {
                       onOpenConfig={handleOpenConfig}
                       onLinkConfig={() => setShowConfigPicker(true)}
                       onSelectMod={handleSelectMod}
+                      onModsChanged={refresh}
                     />
                   )}
                 </div>

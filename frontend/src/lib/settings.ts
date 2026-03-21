@@ -6,11 +6,21 @@ export const defaultSettings: Settings = {
   modrinthAPIKey: '',
   cacheTTLHours: 24,
   appScale: 100,
+  mixedTagLibraryThreshold: 0.18,
+  noTagLibraryThreshold: 0.26,
   customModrinthRoot: '',
   customCurseForgeRoot: '',
   customFTBRoot: '',
   customLauncherRoots: '',
 };
+
+export const MIN_LIBRARY_THRESHOLD = 0.01;
+export const MAX_LIBRARY_THRESHOLD = 0.95;
+
+export function clampLibraryThreshold(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(MAX_LIBRARY_THRESHOLD, Math.max(MIN_LIBRARY_THRESHOLD, value));
+}
 
 export type LauncherRootField = 'customModrinthRoot' | 'customCurseForgeRoot' | 'customFTBRoot';
 
@@ -68,6 +78,8 @@ export function normalizeSettings(settings?: Partial<Settings> | null): Settings
     modrinthAPIKey: settings?.modrinthAPIKey || '',
     cacheTTLHours: settings?.cacheTTLHours || 24,
     appScale: settings?.appScale || 100,
+    mixedTagLibraryThreshold: settings?.mixedTagLibraryThreshold ?? 0.18,
+    noTagLibraryThreshold: settings?.noTagLibraryThreshold ?? 0.26,
     customModrinthRoot: settings?.customModrinthRoot || '',
     customCurseForgeRoot: settings?.customCurseForgeRoot || '',
     customFTBRoot: settings?.customFTBRoot || '',
@@ -81,6 +93,8 @@ export function settingsEqual(a: Settings, b: Settings) {
     && a.modrinthAPIKey === b.modrinthAPIKey
     && a.cacheTTLHours === b.cacheTTLHours
     && a.appScale === b.appScale
+    && a.mixedTagLibraryThreshold === b.mixedTagLibraryThreshold
+    && a.noTagLibraryThreshold === b.noTagLibraryThreshold
     && (a.customModrinthRoot || '') === (b.customModrinthRoot || '')
     && (a.customCurseForgeRoot || '') === (b.customCurseForgeRoot || '')
     && (a.customFTBRoot || '') === (b.customFTBRoot || '')

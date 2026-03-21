@@ -23,11 +23,13 @@ export interface UnresolvedExternalDependency {
 }
 export type ConfigMapping = db.ConfigMapping;
 export type Settings = db.Settings;
+export type LibraryDetectionDebug = main.LibraryDetectionDebug;
 export interface ModDetail {
 	mod: Mod;
 	dependencies: DetailDependency[];
 	configs: ConfigMapping[];
 	providedModules?: string[];
+	libraryDetection: LibraryDetectionDebug;
 	unresolvedExternal?: UnresolvedExternalDependency[];
 	mixins?: MixinDetail[];
 	incomingMixins?: IncomingMixin[];

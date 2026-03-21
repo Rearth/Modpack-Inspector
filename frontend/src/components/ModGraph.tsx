@@ -677,11 +677,11 @@ export function ModGraph({ onSelectMod }: ModGraphProps) {
         <hr className="border-gray-200" />
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: GROUP_COLORS.library }} />
-          <span className="text-gray-700">Library</span>
+          <span className="text-gray-700">Detected library</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: GROUP_COLORS.unused }} />
-          <span className="text-gray-700">Unused library</span>
+          <span className="text-gray-700">Unused detected library</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: GROUP_COLORS.missing }} />

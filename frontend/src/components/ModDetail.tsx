@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { GetModDetail, GetReverseDependencies } from '../../wailsjs/go/main/App';
-import { File06, Link04, XClose, ArrowRight, Plus, AlertTriangle, LinkExternal01, ChevronDown, ChevronRight } from '@untitled-ui/icons-react';
+import { GetModDetail, GetReverseDependencies, SetLibraryOverride } from '../../wailsjs/go/main/App';
+import { File06, Link04, XClose, ArrowRight, Plus, AlertTriangle, LinkExternal01, ChevronDown, ChevronRight, BookOpen01 } from '@untitled-ui/icons-react';
 import type { ModDetail as ModDetailType, ConfigMapping, ReverseDep, DetailDependency, UnresolvedExternalDependency, MixinDetail, IncomingMixin } from '../lib/types';
 import { SourceLinkPill } from './SourceLinkPill';
 
@@ -11,9 +11,10 @@ interface ModDetailProps {
   onOpenConfig: (configPath: string) => void;
   onLinkConfig: () => void;
   onSelectMod: (id: string) => void;
+  onModsChanged?: () => Promise<void> | void;
 }
 
-export function ModDetail({ modId, onClose, onOpenConfig, onLinkConfig, onSelectMod }: ModDetailProps) {
+export function ModDetail({ modId, onClose, onOpenConfig, onLinkConfig, onSelectMod, onModsChanged }: ModDetailProps) {
   const [detail, setDetail] = useState<ModDetailType | null>(null);
   const [reverseDeps, setReverseDeps] = useState<ReverseDep[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +45,7 @@ export function ModDetail({ modId, onClose, onOpenConfig, onLinkConfig, onSelect
 
   if (!detail) return null;
   const { mod, dependencies, configs } = detail;
+  const libraryDetection = detail.libraryDetection;
   const unresolvedExternal = detail.unresolvedExternal || [];
   const categories = mod.categories ? mod.categories.split(',').map(c => c.trim()).filter(Boolean) : [];
   const providedModules = detail.providedModules || [];
@@ -80,7 +82,13 @@ export function ModDetail({ modId, onClose, onOpenConfig, onLinkConfig, onSelect
               ))}
               {mod.isLibrary && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">
-                  Library
+                  Detected Library
+                </span>
+              )}
+              {mod.libraryOverride === 1 && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium" title="Manually forced as library">
+                  <BookOpen01 width={10} height={10} />
+                  Forced
                 </span>
               )}
             </div>
@@ -97,6 +105,15 @@ export function ModDetail({ modId, onClose, onOpenConfig, onLinkConfig, onSelect
             <p className="text-sm text-gray-700 leading-relaxed">{mod.onlineDesc || mod.description}</p>
           </div>
         )}
+
+        <LibraryOverrideCard debug={libraryDetection} modId={modId} onOverrideChange={() => {
+          Promise.all([
+            GetModDetail(modId).then(d => {
+              setDetail(d as ModDetailType);
+            }),
+            Promise.resolve(onModsChanged?.()),
+          ]).catch(console.error);
+        }} />
 
         {providedModules.length > 0 && (
           <div>
@@ -299,6 +316,57 @@ export function ModDetail({ modId, onClose, onOpenConfig, onLinkConfig, onSelect
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function LibraryOverrideCard({ debug, modId, onOverrideChange }: { debug: ModDetailType['libraryDetection']; modId: string; onOverrideChange: () => void }) {
+  const [saving, setSaving] = useState(false);
+  const tone = debug.detected
+    ? 'border-emerald-200 bg-emerald-50/70'
+    : 'border-slate-200 bg-slate-50';
+
+  const handleOverride = (value: number) => {
+    setSaving(true);
+    SetLibraryOverride(modId, value)
+      .then(() => onOverrideChange())
+      .catch(console.error)
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <div className={`rounded-xl border px-3 py-2.5 ${tone}`}>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="min-w-0 flex-1">
+          <span className="text-sm font-medium text-slate-900">{debug.detected ? 'Detected as library' : 'Not detected as library'}</span>
+          <span className="ml-2 text-[11px] text-slate-600">
+            {debug.manualOverride === 1 ? 'Forced to library' : debug.manualOverride === -1 ? 'Forced to not library' : 'Automatic detection'}
+          </span>
+        </div>
+        <span className="rounded-full bg-white/80 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-700">
+          {debug.manualOverride !== 0 ? 'Override' : 'Auto'}
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {([
+            { value: 0, label: 'Auto' },
+            { value: 1, label: 'Force Library' },
+            { value: -1, label: 'Force Not Library' },
+          ] as const).map(opt => (
+            <button
+              key={opt.value}
+              disabled={saving}
+              onClick={() => handleOverride(opt.value)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors ${
+                debug.manualOverride === opt.value
+                  ? 'bg-slate-900 text-white'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

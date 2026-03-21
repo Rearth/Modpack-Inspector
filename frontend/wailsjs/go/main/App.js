@@ -89,3 +89,7 @@ export function SearchMods(arg1) {
 export function SetConfigOverride(arg1, arg2) {
   return window['go']['main']['App']['SetConfigOverride'](arg1, arg2);
 }
+
+export function SetLibraryOverride(arg1, arg2) {
+  return window['go']['main']['App']['SetLibraryOverride'](arg1, arg2);
+}

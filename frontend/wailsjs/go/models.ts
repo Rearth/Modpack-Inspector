@@ -37,6 +37,7 @@ export namespace db {
 	    iconURL: string;
 	    providedIDs: string;
 	    isLibrary: boolean;
+	    libraryOverride: number;
 	    // Go type: time
 	    lastScanned: any;
 	    // Go type: time
@@ -70,6 +71,7 @@ export namespace db {
 	        this.iconURL = source["iconURL"];
 	        this.providedIDs = source["providedIDs"];
 	        this.isLibrary = source["isLibrary"];
+	        this.libraryOverride = source["libraryOverride"];
 	        this.lastScanned = this.convertValues(source["lastScanned"], null);
 	        this.lastAPICheck = this.convertValues(source["lastAPICheck"], null);
 	        this.onlineDesc = source["onlineDesc"];
@@ -102,6 +104,8 @@ export namespace db {
 	    modrinthAPIKey: string;
 	    cacheTTLHours: number;
 	    appScale: number;
+	    mixedTagLibraryThreshold: number;
+	    noTagLibraryThreshold: number;
 	    customModrinthRoot: string;
 	    customCurseForgeRoot: string;
 	    customFTBRoot: string;
@@ -118,6 +122,8 @@ export namespace db {
 	        this.modrinthAPIKey = source["modrinthAPIKey"];
 	        this.cacheTTLHours = source["cacheTTLHours"];
 	        this.appScale = source["appScale"];
+	        this.mixedTagLibraryThreshold = source["mixedTagLibraryThreshold"];
+	        this.noTagLibraryThreshold = source["noTagLibraryThreshold"];
 	        this.customModrinthRoot = source["customModrinthRoot"];
 	        this.customCurseForgeRoot = source["customCurseForgeRoot"];
 	        this.customFTBRoot = source["customFTBRoot"];
@@ -243,6 +249,42 @@ export namespace main {
 	        this.targetMembers = source["targetMembers"];
 	    }
 	}
+	export class LibraryDetectionDebug {
+	    detected: boolean;
+	    hasLibraryTag: boolean;
+	    hasOnlyLibraryTags: boolean;
+	    contentTagCount: number;
+	    usedSemantic: boolean;
+	    semanticConfidence: number;
+	    positiveSimilarity: number;
+	    negativeSimilarity: number;
+	    threshold: number;
+	    usedStrongDescription: boolean;
+	    descriptionHasLibraryKeyword: boolean;
+	    manualOverride: number;
+	    reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new LibraryDetectionDebug(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.detected = source["detected"];
+	        this.hasLibraryTag = source["hasLibraryTag"];
+	        this.hasOnlyLibraryTags = source["hasOnlyLibraryTags"];
+	        this.contentTagCount = source["contentTagCount"];
+	        this.usedSemantic = source["usedSemantic"];
+	        this.semanticConfidence = source["semanticConfidence"];
+	        this.positiveSimilarity = source["positiveSimilarity"];
+	        this.negativeSimilarity = source["negativeSimilarity"];
+	        this.threshold = source["threshold"];
+	        this.usedStrongDescription = source["usedStrongDescription"];
+	        this.descriptionHasLibraryKeyword = source["descriptionHasLibraryKeyword"];
+	        this.manualOverride = source["manualOverride"];
+	        this.reason = source["reason"];
+	    }
+	}
 	export class MixinDetail {
 	    mixinClass: string;
 	    targetClass: string;
@@ -288,6 +330,7 @@ export namespace main {
 	    dependencies: DetailDependency[];
 	    configs: db.ConfigMapping[];
 	    providedModules: string[];
+	    libraryDetection: LibraryDetectionDebug;
 	    unresolvedExternal?: UnresolvedExternalDepLink[];
 	    mixins?: MixinDetail[];
 	    incomingMixins?: IncomingMixin[];
@@ -302,6 +345,7 @@ export namespace main {
 	        this.dependencies = this.convertValues(source["dependencies"], DetailDependency);
 	        this.configs = this.convertValues(source["configs"], db.ConfigMapping);
 	        this.providedModules = source["providedModules"];
+	        this.libraryDetection = this.convertValues(source["libraryDetection"], LibraryDetectionDebug);
 	        this.unresolvedExternal = this.convertValues(source["unresolvedExternal"], UnresolvedExternalDepLink);
 	        this.mixins = this.convertValues(source["mixins"], MixinDetail);
 	        this.incomingMixins = this.convertValues(source["incomingMixins"], IncomingMixin);

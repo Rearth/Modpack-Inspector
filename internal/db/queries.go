@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -21,9 +22,9 @@ func (d *Database) UpsertMod(m *Mod) error {
 			jar_file_name, jar_sha1, jar_sha512, fingerprint, homepage_url,
 			curseforge_id, modrinth_id, curseforge_url, modrinth_url, icon_url,
 			provided_ids,
-			embedding, is_library, last_scanned, last_api_check, online_desc,
+			embedding, is_library, library_override, last_scanned, last_api_check, online_desc,
 			loaders, categories, project_type)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			name=excluded.name, version=excluded.version, description=excluded.description,
 			authors=excluded.authors, mod_loader=excluded.mod_loader,
@@ -34,6 +35,7 @@ func (d *Database) UpsertMod(m *Mod) error {
 			modrinth_url=excluded.modrinth_url, icon_url=excluded.icon_url,
 			provided_ids=excluded.provided_ids,
 			embedding=excluded.embedding, is_library=excluded.is_library,
+			library_override=excluded.library_override,
 			last_scanned=excluded.last_scanned, last_api_check=excluded.last_api_check,
 			online_desc=excluded.online_desc,
 			loaders=excluded.loaders, categories=excluded.categories,
@@ -42,7 +44,7 @@ func (d *Database) UpsertMod(m *Mod) error {
 		m.JarFileName, m.JarSHA1, m.JarSHA512, m.Fingerprint, m.HomepageURL,
 		m.CurseForgeID, m.ModrinthID, m.CurseForgeURL, m.ModrinthURL, m.IconURL,
 		m.ProvidedIDs,
-		m.Embedding, boolToInt(m.IsLibrary), m.LastScanned.Format(time.RFC3339),
+		m.Embedding, boolToInt(m.IsLibrary), m.LibraryOverride, m.LastScanned.Format(time.RFC3339),
 		m.LastAPICheck.Format(time.RFC3339), m.OnlineDesc,
 		m.Loaders, m.Categories, m.ProjectType)
 	return err
@@ -53,7 +55,7 @@ func (d *Database) GetAllMods() ([]Mod, error) {
 		SELECT id, name, version, description, authors, mod_loader, jar_file_name,
 			jar_sha1, jar_sha512, fingerprint, homepage_url, curseforge_id, modrinth_id,
 			curseforge_url, modrinth_url, icon_url, provided_ids, embedding, is_library,
-			last_scanned, last_api_check, online_desc, loaders, categories, project_type
+			library_override, last_scanned, last_api_check, online_desc, loaders, categories, project_type
 		FROM mods ORDER BY name`)
 	if err != nil {
 		return nil, err
@@ -67,7 +69,7 @@ func (d *Database) GetModByID(id string) (*Mod, error) {
 		SELECT id, name, version, description, authors, mod_loader, jar_file_name,
 			jar_sha1, jar_sha512, fingerprint, homepage_url, curseforge_id, modrinth_id,
 			curseforge_url, modrinth_url, icon_url, provided_ids, embedding, is_library,
-			last_scanned, last_api_check, online_desc, loaders, categories, project_type
+			library_override, last_scanned, last_api_check, online_desc, loaders, categories, project_type
 		FROM mods WHERE id = ?`, id)
 
 	m, err := scanMod(row)
@@ -143,7 +145,7 @@ func scanMods(rows *sql.Rows) ([]Mod, error) {
 		err := rows.Scan(&m.ID, &m.Name, &m.Version, &m.Description, &m.Authors,
 			&m.ModLoader, &m.JarFileName, &m.JarSHA1, &m.JarSHA512, &m.Fingerprint,
 			&m.HomepageURL, &m.CurseForgeID, &m.ModrinthID, &m.CurseForgeURL,
-			&m.ModrinthURL, &m.IconURL, &m.ProvidedIDs, &m.Embedding, &isLib, &lastScanned,
+			&m.ModrinthURL, &m.IconURL, &m.ProvidedIDs, &m.Embedding, &isLib, &m.LibraryOverride, &lastScanned,
 			&lastAPI, &m.OnlineDesc, &m.Loaders, &m.Categories, &m.ProjectType)
 		if err != nil {
 			return nil, err
@@ -163,7 +165,7 @@ func scanMod(row *sql.Row) (*Mod, error) {
 	err := row.Scan(&m.ID, &m.Name, &m.Version, &m.Description, &m.Authors,
 		&m.ModLoader, &m.JarFileName, &m.JarSHA1, &m.JarSHA512, &m.Fingerprint,
 		&m.HomepageURL, &m.CurseForgeID, &m.ModrinthID, &m.CurseForgeURL,
-		&m.ModrinthURL, &m.IconURL, &m.ProvidedIDs, &m.Embedding, &isLib, &lastScanned,
+		&m.ModrinthURL, &m.IconURL, &m.ProvidedIDs, &m.Embedding, &isLib, &m.LibraryOverride, &lastScanned,
 		&lastAPI, &m.OnlineDesc, &m.Loaders, &m.Categories, &m.ProjectType)
 	if err != nil {
 		return nil, err
@@ -359,7 +361,7 @@ func (d *Database) SetSetting(key, value string) error {
 }
 
 func (d *Database) GetSettings() (*Settings, error) {
-	s := &Settings{CacheTTLHours: 24}
+	s := &Settings{CacheTTLHours: 24, MixedTagLibraryThreshold: 0.18, NoTagLibraryThreshold: 0.26}
 	if v, err := d.GetSetting("instance_path"); err == nil {
 		s.InstancePath = v
 	}
@@ -380,6 +382,16 @@ func (d *Database) GetSettings() (*Settings, error) {
 	}
 	if v, err := d.GetSetting("custom_launcher_roots"); err == nil {
 		s.CustomLauncherRoots = v
+	}
+	if v, err := d.GetSetting("mixed_tag_library_threshold"); err == nil && v != "" {
+		if parsed, parseErr := strconv.ParseFloat(v, 64); parseErr == nil {
+			s.MixedTagLibraryThreshold = parsed
+		}
+	}
+	if v, err := d.GetSetting("no_tag_library_threshold"); err == nil && v != "" {
+		if parsed, parseErr := strconv.ParseFloat(v, 64); parseErr == nil {
+			s.NoTagLibraryThreshold = parsed
+		}
 	}
 	return s, nil
 }
@@ -403,7 +415,67 @@ func (d *Database) SaveSettings(s *Settings) error {
 	if err := d.SetSetting("custom_ftb_root", s.CustomFTBRoot); err != nil {
 		return err
 	}
-	return d.SetSetting("custom_launcher_roots", s.CustomLauncherRoots)
+	if err := d.SetSetting("custom_launcher_roots", s.CustomLauncherRoots); err != nil {
+		return err
+	}
+	if err := d.SetSetting("mixed_tag_library_threshold", strconv.FormatFloat(s.MixedTagLibraryThreshold, 'f', -1, 64)); err != nil {
+		return err
+	}
+	return d.SetSetting("no_tag_library_threshold", strconv.FormatFloat(s.NoTagLibraryThreshold, 'f', -1, 64))
+}
+
+// GetLibraryOverride returns the persisted manual library override for a mod ID.
+func (d *Database) GetLibraryOverride(modID string) (int, error) {
+	var override int
+	err := d.db.QueryRow("SELECT override FROM library_overrides WHERE mod_id = ?", modID).Scan(&override)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return override, err
+}
+
+// GetAllLibraryOverrides returns the persisted library override list.
+func (d *Database) GetAllLibraryOverrides() ([]LibraryOverride, error) {
+	rows, err := d.db.Query("SELECT mod_id, override FROM library_overrides ORDER BY mod_id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var overrides []LibraryOverride
+	for rows.Next() {
+		var entry LibraryOverride
+		if err := rows.Scan(&entry.ModID, &entry.Override); err != nil {
+			return nil, err
+		}
+		overrides = append(overrides, entry)
+	}
+	return overrides, rows.Err()
+}
+
+// SetLibraryOverride sets the manual library override for a mod ID in the global override store.
+// override: 1 = force library, -1 = force not library, 0 = clear override.
+func (d *Database) SetLibraryOverride(modID string, override int) error {
+	if override == 0 {
+		_, err := d.db.Exec("DELETE FROM library_overrides WHERE mod_id = ?", modID)
+		return err
+	}
+	_, err := d.db.Exec(`
+		INSERT INTO library_overrides (mod_id, override) VALUES (?, ?)
+		ON CONFLICT(mod_id) DO UPDATE SET override=excluded.override`, modID, override)
+	return err
+}
+
+// UpdateModLibraryOverride updates the active scan row with the effective override value.
+func (d *Database) UpdateModLibraryOverride(modID string, override int) error {
+	_, err := d.db.Exec("UPDATE mods SET library_override = ? WHERE id = ?", override, modID)
+	return err
+}
+
+// UpdateModIsLibrary sets the is_library flag for a mod.
+func (d *Database) UpdateModIsLibrary(modID string, isLibrary bool) error {
+	_, err := d.db.Exec("UPDATE mods SET is_library = ? WHERE id = ?", boolToInt(isLibrary), modID)
+	return err
 }
 
 // --- Mixins ---

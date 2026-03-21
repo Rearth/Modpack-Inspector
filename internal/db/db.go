@@ -67,6 +67,7 @@ func (d *Database) migrate() error {
 			provided_ids TEXT NOT NULL DEFAULT '',
 			embedding BLOB,
 			is_library INTEGER NOT NULL DEFAULT 0,
+			library_override INTEGER NOT NULL DEFAULT 0,
 			last_scanned TEXT NOT NULL DEFAULT '',
 			last_api_check TEXT NOT NULL DEFAULT '',
 			online_desc TEXT NOT NULL DEFAULT '',
@@ -99,6 +100,10 @@ func (d *Database) migrate() error {
 			key TEXT PRIMARY KEY,
 			value TEXT NOT NULL DEFAULT ''
 		)`,
+		`CREATE TABLE IF NOT EXISTS library_overrides (
+			mod_id TEXT PRIMARY KEY,
+			override INTEGER NOT NULL DEFAULT 0
+		)`,
 		`CREATE TABLE IF NOT EXISTS mixins (
 			owner_mod_id TEXT NOT NULL,
 			mixin_class TEXT NOT NULL,
@@ -121,6 +126,7 @@ func (d *Database) migrate() error {
 		"ALTER TABLE mods ADD COLUMN categories TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE mods ADD COLUMN project_type TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE mods ADD COLUMN provided_ids TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE mods ADD COLUMN library_override INTEGER NOT NULL DEFAULT 0",
 	}
 	for _, q := range optionalAlters {
 		d.db.Exec(q)

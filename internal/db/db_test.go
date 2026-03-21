@@ -264,6 +264,8 @@ func TestSettings(t *testing.T) {
 	s.CustomCurseForgeRoot = "/curseforge"
 	s.CustomFTBRoot = "/ftb"
 	s.CustomLauncherRoots = "/custom-a\n/custom-b"
+	s.MixedTagLibraryThreshold = 0.19
+	s.NoTagLibraryThreshold = 0.31
 	if err := db.SaveSettings(s); err != nil {
 		t.Fatalf("SaveSettings() error: %v", err)
 	}
@@ -277,6 +279,127 @@ func TestSettings(t *testing.T) {
 	}
 	if got.CustomModrinthRoot != "/modrinth" || got.CustomCurseForgeRoot != "/curseforge" || got.CustomFTBRoot != "/ftb" || got.CustomLauncherRoots != "/custom-a\n/custom-b" {
 		t.Errorf("custom launcher roots not preserved: %+v", got)
+	}
+	if got.MixedTagLibraryThreshold != 0.19 || got.NoTagLibraryThreshold != 0.31 {
+		t.Errorf("library thresholds not preserved: %+v", got)
+	}
+}
+
+func TestLibraryOverridePersistsAcrossUpsert(t *testing.T) {
+	db := setupTestDB(t)
+
+	if err := db.SetLibraryOverride("override-mod", 1); err != nil {
+		t.Fatalf("SetLibraryOverride() error: %v", err)
+	}
+
+	mod := &Mod{
+		ID:              "override-mod",
+		Name:            "Override Mod",
+		JarFileName:     "override.jar",
+		IsLibrary:       false,
+		LibraryOverride: 1,
+		LastScanned:     time.Now(),
+	}
+	if err := db.UpsertMod(mod); err != nil {
+		t.Fatalf("initial UpsertMod() error: %v", err)
+	}
+
+	got, err := db.GetModByID("override-mod")
+	if err != nil {
+		t.Fatalf("GetModByID() error: %v", err)
+	}
+	if got == nil || got.LibraryOverride != 1 {
+		t.Fatalf("expected initial override 1, got %+v", got)
+	}
+
+	mod.Version = "2.0.0"
+	mod.IsLibrary = true
+	if err := db.UpsertMod(mod); err != nil {
+		t.Fatalf("second UpsertMod() error: %v", err)
+	}
+
+	got, err = db.GetModByID("override-mod")
+	if err != nil {
+		t.Fatalf("GetModByID() after update error: %v", err)
+	}
+	if got == nil || got.LibraryOverride != 1 {
+		t.Fatalf("expected override to survive upsert, got %+v", got)
+	}
+
+	if err := db.SetLibraryOverride("override-mod", -1); err != nil {
+		t.Fatalf("SetLibraryOverride() error: %v", err)
+	}
+	if err := db.UpdateModLibraryOverride("override-mod", -1); err != nil {
+		t.Fatalf("UpdateModLibraryOverride() error: %v", err)
+	}
+
+	mod.Version = "3.0.0"
+	mod.LibraryOverride = -1
+	if err := db.UpsertMod(mod); err != nil {
+		t.Fatalf("third UpsertMod() error: %v", err)
+	}
+
+	got, err = db.GetModByID("override-mod")
+	if err != nil {
+		t.Fatalf("final GetModByID() error: %v", err)
+	}
+	if got == nil || got.LibraryOverride != -1 {
+		t.Fatalf("expected override -1 after update, got %+v", got)
+	}
+}
+
+func TestGlobalLibraryOverridesPersistAcrossScanDataClears(t *testing.T) {
+	db := setupTestDB(t)
+
+	if err := db.SetLibraryOverride("shared-lib", 1); err != nil {
+		t.Fatalf("SetLibraryOverride(shared-lib) error: %v", err)
+	}
+	if err := db.SetLibraryOverride("not-a-lib", -1); err != nil {
+		t.Fatalf("SetLibraryOverride(not-a-lib) error: %v", err)
+	}
+
+	if err := db.UpsertMod(&Mod{ID: "shared-lib", Name: "Shared Lib", JarFileName: "shared.jar", LibraryOverride: 1, LastScanned: time.Now()}); err != nil {
+		t.Fatalf("UpsertMod() error: %v", err)
+	}
+
+	if err := db.ClearScanData(); err != nil {
+		t.Fatalf("ClearScanData() error: %v", err)
+	}
+
+	overrides, err := db.GetAllLibraryOverrides()
+	if err != nil {
+		t.Fatalf("GetAllLibraryOverrides() after ClearScanData error: %v", err)
+	}
+	if len(overrides) != 2 {
+		t.Fatalf("expected 2 global overrides after ClearScanData, got %d", len(overrides))
+	}
+
+	if err := db.ResetAll(); err != nil {
+		t.Fatalf("ResetAll() error: %v", err)
+	}
+
+	overrides, err = db.GetAllLibraryOverrides()
+	if err != nil {
+		t.Fatalf("GetAllLibraryOverrides() after ResetAll error: %v", err)
+	}
+	if len(overrides) != 2 {
+		t.Fatalf("expected global overrides to survive ResetAll, got %d", len(overrides))
+	}
+
+	sharedOverride, err := db.GetLibraryOverride("shared-lib")
+	if err != nil {
+		t.Fatalf("GetLibraryOverride(shared-lib) error: %v", err)
+	}
+	if sharedOverride != 1 {
+		t.Fatalf("expected shared-lib override 1, got %d", sharedOverride)
+	}
+
+	notLibOverride, err := db.GetLibraryOverride("not-a-lib")
+	if err != nil {
+		t.Fatalf("GetLibraryOverride(not-a-lib) error: %v", err)
+	}
+	if notLibOverride != -1 {
+		t.Fatalf("expected not-a-lib override -1, got %d", notLibOverride)
 	}
 }
 

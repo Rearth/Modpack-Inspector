@@ -4,7 +4,7 @@ import { Folder, RefreshCw05, Check, Trash01 } from '@untitled-ui/icons-react';
 import type { Settings, Instance } from '../lib/types';
 import { AccuracyNotice } from './AccuracyNotice';
 import { LauncherRootField } from './LauncherRootField';
-import { defaultSettings, launcherRootGuides, normalizeSettings, otherLauncherHelper, settingsEqual, type LauncherRootField as LauncherRootFieldKey } from '../lib/settings';
+import { clampLibraryThreshold, defaultSettings, launcherRootGuides, normalizeSettings, otherLauncherHelper, settingsEqual, type LauncherRootField as LauncherRootFieldKey } from '../lib/settings';
 
 export function SettingsPanel() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
@@ -27,8 +27,14 @@ export function SettingsPanel() {
 
   const handleSave = async () => {
     try {
-      await SaveSettings(settings);
-      setSavedSettings(settings);
+      const nextSettings = {
+        ...settings,
+        mixedTagLibraryThreshold: clampLibraryThreshold(settings.mixedTagLibraryThreshold, defaultSettings.mixedTagLibraryThreshold),
+        noTagLibraryThreshold: clampLibraryThreshold(settings.noTagLibraryThreshold, defaultSettings.noTagLibraryThreshold),
+      };
+      await SaveSettings(nextSettings);
+      setSettings(nextSettings);
+      setSavedSettings(nextSettings);
       refreshInstances();
       setSaved(true);
       setSavedToastVisible(true);
@@ -227,6 +233,43 @@ export function SettingsPanel() {
               placeholder="Optional — Modrinth works without an API key"
               className="mt-1 w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-gray-400"
             />
+          </label>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-sm font-medium text-gray-700">Library Detection</h2>
+          <p className="text-xs text-gray-400">These thresholds are compared against the semantic score shown in mod details. Save and rescan to apply them to stored library flags.</p>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-xs text-gray-500">Mixed tags threshold</span>
+            <input
+              type="number"
+              min={0.01}
+              max={0.95}
+              step={0.01}
+              value={settings.mixedTagLibraryThreshold}
+              onChange={e => setSettings(s => ({ ...s, mixedTagLibraryThreshold: Number(e.target.value) }))}
+              className="mt-1 w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:border-gray-400"
+            />
+            <span className="text-[11px] text-gray-400 mt-1 block">Used when a mod has a library tag plus other categories.</span>
+          </label>
+
+          <label className="block">
+            <span className="text-xs text-gray-500">No-tag threshold</span>
+            <input
+              type="number"
+              min={0.01}
+              max={0.95}
+              step={0.01}
+              value={settings.noTagLibraryThreshold}
+              onChange={e => setSettings(s => ({ ...s, noTagLibraryThreshold: Number(e.target.value) }))}
+              className="mt-1 w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 focus:outline-none focus:border-gray-400"
+            />
+            <span className="text-[11px] text-gray-400 mt-1 block">Used when a mod has no explicit library tag and must rely on semantic similarity alone.</span>
           </label>
         </div>
       </section>

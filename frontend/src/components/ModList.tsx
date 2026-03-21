@@ -9,10 +9,12 @@ interface ModListProps {
   unusedLibraries: string[];
   scanStatus: string;
   onCategoryFilter: (cat: string) => void;
+  onDetectedLibraryFilter: () => void;
   categoryFilter: string;
+  detectedLibraryFilter: boolean;
 }
 
-export function ModList({ mods, selectedModId, onSelectMod, unusedLibraries, scanStatus, onCategoryFilter, categoryFilter }: ModListProps) {
+export function ModList({ mods, selectedModId, onSelectMod, unusedLibraries, scanStatus, onCategoryFilter, onDetectedLibraryFilter, categoryFilter, detectedLibraryFilter }: ModListProps) {
   if (mods.length === 0 && !scanStatus) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400">
@@ -29,6 +31,7 @@ export function ModList({ mods, selectedModId, onSelectMod, unusedLibraries, sca
         {mods.map(mod => {
           const isUnused = unusedSet.has(mod.id);
           const isLibrary = mod.isLibrary;
+          const isForcedLibrary = mod.libraryOverride === 1;
           const isSelected = selectedModId === mod.id;
           const desc = mod.onlineDesc || mod.description || '';
           const categories = mod.categories ? mod.categories.split(',').map(c => c.trim()).filter(Boolean) : [];
@@ -62,9 +65,26 @@ export function ModList({ mods, selectedModId, onSelectMod, unusedLibraries, sca
                     <span className="font-medium text-sm text-gray-900 truncate">{mod.name || mod.id}</span>
                     <span className="text-xs text-gray-400 font-mono">{mod.version}</span>
                     {isLibrary && (
-                      <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 shrink-0 font-medium">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDetectedLibraryFilter(); }}
+                        className={`inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full shrink-0 font-medium transition-colors ${
+                          detectedLibraryFilter
+                            ? 'bg-slate-300 text-slate-900'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                        title="Filter detected libraries"
+                      >
                         <BookOpen01 width={10} height={10} />
-                        Library
+                        Detected Library
+                      </button>
+                    )}
+                    {isForcedLibrary && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full shrink-0 font-medium bg-blue-50 text-blue-700"
+                        title="Manually forced as library"
+                      >
+                        <BookOpen01 width={10} height={10} />
+                        Forced
                       </span>
                     )}
                     {isUnused && (

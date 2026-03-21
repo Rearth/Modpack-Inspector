@@ -50,3 +50,5 @@ export function ScanNow():Promise<void>;
 export function SearchMods(arg1:string):Promise<Array<embeddings.SearchResult>>;
 
 export function SetConfigOverride(arg1:string,arg2:string):Promise<void>;
+
+export function SetLibraryOverride(arg1:string,arg2:number):Promise<void>;
