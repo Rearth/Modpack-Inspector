@@ -71,14 +71,33 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-gcc
 
+      - name: Add MSYS2 toolchain to PATH
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $msys2 = '${{ steps.msys2.outputs.msys2-location }}'
+          "$msys2\ucrt64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "$msys2\usr\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
 
-      - name: Build application
+      - name: Build application on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CGO_ENABLED: '1'
+          CC: ${{ format('{0}\ucrt64\bin\gcc.exe', steps.msys2.outputs.msys2-location) }}
+          CXX: ${{ format('{0}\ucrt64\bin\g++.exe', steps.msys2.outputs.msys2-location) }}
+        run: |
+          & "$(go env GOPATH)\bin\wails.exe" build -clean
+
+      - name: Build application on Unix
+        if: runner.os != 'Windows'
         shell: bash
         env:
           CGO_ENABLED: '1'
-          CC: ${{ runner.os == 'Windows' && format('{0}/ucrt64/bin/gcc.exe', steps.msys2.outputs.msys2-location) || runner.os == 'macOS' && 'clang' || 'gcc' }}
+          CC: ${{ runner.os == 'macOS' && 'clang' || 'gcc' }}
         run: |
           "$(go env GOPATH)/bin/wails" build -clean
 
