@@ -11,6 +11,8 @@ Use this tool at your own risk. Based on my testing, it does what's expected, bu
 
 Modpack Inspector is a desktop application for inspecting and debugging Minecraft modpacks.
 
+Download the latest release via: https://github.com/Rearth/Modpack-Inspector/releases
+
 It scans the mods in a selected instance, extracts metadata and dependency information from each JAR, enriches that data with Modrinth and CurseForge when available, and presents the result in a searchable desktop UI built with Wails.
 
 The goal is to make modpack maintenance faster: you can see what is installed, how mods depend on each other, which libraries are unused, which config files likely belong to which mods, and where unresolved dependencies are coming from.
