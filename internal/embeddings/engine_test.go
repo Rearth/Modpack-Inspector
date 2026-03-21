@@ -1,7 +1,12 @@
 package embeddings
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -103,5 +108,87 @@ func TestMeanPoolWithPadding(t *testing.T) {
 		if math.Abs(v-expected[i]) > 1e-10 {
 			t.Errorf("index %d: expected %f, got %f", i, expected[i], v)
 		}
+	}
+}
+
+func TestExtractRuntimeFromZip(t *testing.T) {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "runtime.zip")
+	destPath := filepath.Join(tmpDir, runtimeFileName())
+	content := []byte("zip runtime payload")
+
+	file, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("create zip: %v", err)
+	}
+
+	zw := zip.NewWriter(file)
+	entry, err := zw.Create(filepath.ToSlash(filepath.Join("pkg", "lib", runtimeFileName())))
+	if err != nil {
+		t.Fatalf("create zip entry: %v", err)
+	}
+	if _, err := entry.Write(content); err != nil {
+		t.Fatalf("write zip entry: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip writer: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close zip file: %v", err)
+	}
+
+	if err := extractRuntimeFromZip(archivePath, destPath); err != nil {
+		t.Fatalf("extract zip runtime: %v", err)
+	}
+
+	got, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatalf("read extracted runtime: %v", err)
+	}
+	if string(got) != string(content) {
+		t.Fatalf("unexpected extracted zip content: got %q want %q", string(got), string(content))
+	}
+}
+
+func TestExtractRuntimeFromTarGz(t *testing.T) {
+	tmpDir := t.TempDir()
+	archivePath := filepath.Join(tmpDir, "runtime.tgz")
+	destPath := filepath.Join(tmpDir, runtimeFileName())
+	content := []byte("tgz runtime payload")
+
+	file, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("create tgz: %v", err)
+	}
+
+	gzw := gzip.NewWriter(file)
+	tw := tar.NewWriter(gzw)
+	entryName := filepath.ToSlash(filepath.Join("pkg", "lib", runtimeFileName()))
+	if err := tw.WriteHeader(&tar.Header{Name: entryName, Mode: 0644, Size: int64(len(content))}); err != nil {
+		t.Fatalf("write tar header: %v", err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatalf("write tar content: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar writer: %v", err)
+	}
+	if err := gzw.Close(); err != nil {
+		t.Fatalf("close gzip writer: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close tgz file: %v", err)
+	}
+
+	if err := extractRuntimeFromTarGz(archivePath, destPath); err != nil {
+		t.Fatalf("extract tgz runtime: %v", err)
+	}
+
+	got, err := os.ReadFile(destPath)
+	if err != nil {
+		t.Fatalf("read extracted runtime: %v", err)
+	}
+	if string(got) != string(content) {
+		t.Fatalf("unexpected extracted tgz content: got %q want %q", string(got), string(content))
 	}
 }

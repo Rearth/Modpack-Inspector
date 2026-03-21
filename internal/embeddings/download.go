@@ -1,7 +1,9 @@
 package embeddings
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"net/http"
@@ -148,9 +150,11 @@ func downloadRuntime(dataDir string) error {
 	if strings.HasSuffix(url, ".zip") {
 		return downloadAndExtractZip(url, dataDir)
 	}
-	// tgz for linux/mac — for now only support Windows zip
-	return fmt.Errorf("tgz extraction not yet implemented for %s; please manually place %s in %s",
-		runtime.GOOS, runtimeFileName(), filepath.Join(dataDir, "models"))
+	if strings.HasSuffix(url, ".tgz") {
+		return downloadAndExtractTarGz(url, dataDir)
+	}
+
+	return fmt.Errorf("unsupported runtime archive format for %s", url)
 }
 
 func downloadAndExtractZip(url, dataDir string) error {
@@ -179,10 +183,39 @@ func downloadAndExtractZip(url, dataDir string) error {
 	}
 	tmpFile.Close()
 
-	return extractDLLFromZip(tmpPath, RuntimePath(dataDir))
+	return extractRuntimeFromZip(tmpPath, RuntimePath(dataDir))
 }
 
-func extractDLLFromZip(zipPath, destPath string) error {
+func downloadAndExtractTarGz(url, dataDir string) error {
+	tmpFile, err := os.CreateTemp("", "onnxruntime-*.tgz")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		tmpFile.Close()
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		tmpFile.Close()
+		return fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
+	}
+
+	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+		tmpFile.Close()
+		return err
+	}
+	tmpFile.Close()
+
+	return extractRuntimeFromTarGz(tmpPath, RuntimePath(dataDir))
+}
+
+func extractRuntimeFromZip(zipPath, destPath string) error {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return err
@@ -191,24 +224,68 @@ func extractDLLFromZip(zipPath, destPath string) error {
 
 	target := runtimeFileName()
 	for _, f := range r.File {
-		// Match by filename at end of path (e.g. "onnxruntime-win-x64-1.20.1/lib/onnxruntime.dll")
-		if !strings.HasSuffix(f.Name, "/"+target) && filepath.Base(f.Name) != target {
+		if !archiveEntryMatches(f.Name, target) {
 			continue
 		}
 		rc, err := f.Open()
 		if err != nil {
 			return err
 		}
-		out, err := os.Create(destPath)
-		if err != nil {
-			rc.Close()
-			return err
-		}
-		_, copyErr := io.Copy(out, rc)
-		rc.Close()
-		out.Close()
-		return copyErr
+		return writeArchiveEntry(rc, destPath)
 	}
 
 	return fmt.Errorf("%s not found in zip archive", target)
+
+}
+
+func extractRuntimeFromTarGz(tgzPath, destPath string) error {
+	file, err := os.Open(tgzPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	gzipReader, err := gzip.NewReader(file)
+	if err != nil {
+		return err
+	}
+	defer gzipReader.Close()
+
+	tarReader := tar.NewReader(gzipReader)
+	target := runtimeFileName()
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+			continue
+		}
+		if !archiveEntryMatches(header.Name, target) {
+			continue
+		}
+
+		return writeArchiveEntry(tarReader, destPath)
+	}
+
+	return fmt.Errorf("%s not found in tar.gz archive", target)
+}
+
+func archiveEntryMatches(name, target string) bool {
+	return strings.HasSuffix(name, "/"+target) || filepath.Base(name) == target
+}
+
+func writeArchiveEntry(reader io.Reader, destPath string) error {
+	out, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, reader)
+	return err
 }
