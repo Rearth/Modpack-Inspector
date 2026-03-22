@@ -160,7 +160,7 @@ That means:
 1. Launch Modpack Inspector.
 2. On first start, choose a Minecraft instance from the detected list, or browse to one manually.
 3. Wait for the initial scan to finish.
-4. Use the left navigation to switch between Mods, Graph, and Settings.
+4. Use the left navigation to switch between Mods, Graph, Logs, and Settings.
 
 ### Choosing An Instance
 
@@ -208,6 +208,17 @@ The editor supports:
 - syntax-aware Monaco editing for common config formats
 - direct save from the UI
 - hover access to the full resolved file path
+
+### Inspecting Logs
+
+The Logs view gives you direct access to instance runtime output and crash reports.
+
+You can:
+
+- open the newest crash report immediately from the summary card
+- select older crash reports from the crash history dropdown
+- switch between discovered log files such as `latest.log` and launcher/debug logs
+- live-follow `logs/latest.log` while Minecraft is still running and watch new lines appear as they are written
 
 ### Rescanning
 

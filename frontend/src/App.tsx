@@ -5,6 +5,7 @@ import { SearchBar } from './components/SearchBar';
 import { ModList } from './components/ModList';
 import { ModDetail } from './components/ModDetail';
 import { ModGraph } from './components/ModGraph';
+import { LogsPanel } from './components/LogsPanel';
 import { ConfigEditor } from './components/ConfigEditor';
 import { ConfigPicker } from './components/ConfigPicker';
 import { SettingsPanel } from './components/SettingsPanel';
@@ -241,6 +242,12 @@ export default function App() {
         {view === 'graph' && (
           <div className="relative flex-1 min-h-0 overflow-hidden">
             <ModGraph onSelectMod={(id) => { setSelectedModId(id); setView('mods'); }} />
+          </div>
+        )}
+
+        {view === 'logs' && (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <LogsPanel instanceName={instanceName} />
           </div>
         )}
 

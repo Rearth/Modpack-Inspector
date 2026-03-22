@@ -36,6 +36,9 @@ type App struct {
 	modsDir   string
 	configDir string
 
+	liveLogMu     sync.Mutex
+	liveLogCancel context.CancelFunc
+
 	scanGen atomic.Uint64 // incremented on each scan start; checked to abort stale scans
 
 	libraryClassifierOnce    sync.Once
@@ -113,6 +116,7 @@ func (a *App) initEmbeddingModel(instancePath string) {
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	a.StopLiveLog()
 	if a.watcher != nil {
 		a.watcher.Close()
 	}
@@ -123,6 +127,8 @@ func (a *App) shutdown(ctx context.Context) {
 }
 
 func (a *App) setInstanceDirs(instancePath string) {
+	a.StopLiveLog()
+
 	if a.watcher != nil {
 		a.watcher.Close()
 		a.watcher = nil

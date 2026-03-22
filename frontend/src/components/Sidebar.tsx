@@ -1,3 +1,4 @@
+import type { ComponentType, SVGProps } from 'react';
 import { Package, RefreshCw05, Settings02, Share07 } from '@untitled-ui/icons-react';
 import type { View } from '../lib/types';
 
@@ -8,10 +9,21 @@ interface SidebarProps {
   scanStatus: string;
 }
 
-const navItems: { view: View; label: string; icon: typeof Package }[] = [
+function LogsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M5 6.5H19" />
+      <path d="M5 12H19" />
+      <path d="M5 17.5H14" />
+      <path d="M16.5 16L19 18.5L22 14.5" />
+    </svg>
+  );
+}
+
+const navItems: { view: View; label: string; icon: ComponentType<{ width?: number; height?: number; className?: string }> }[] = [
   { view: 'mods', label: 'Mods', icon: Package },
   { view: 'graph', label: 'Graph', icon: Share07 },
-  { view: 'settings', label: 'Settings', icon: Settings02 },
+  { view: 'logs', label: 'Logs', icon: LogsIcon },
 ];
 
 export function Sidebar({ activeView, onViewChange, onScan, scanStatus }: SidebarProps) {
@@ -44,6 +56,20 @@ export function Sidebar({ activeView, onViewChange, onScan, scanStatus }: Sideba
       >
         <RefreshCw05 width={18} height={18} className={scanStatus ? 'animate-spin' : ''} />
         <span className="text-[10px] font-medium leading-none">Scan</span>
+      </button>
+
+      <button
+        onClick={() => onViewChange('settings')}
+        className={`relative w-11 h-11 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-colors text-xs ${
+          activeView === 'settings'
+            ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+            : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+        }`}
+        title="Settings"
+      >
+        {activeView === 'settings' && <span className="absolute -left-1 top-1/2 h-6 w-1 -translate-y-1/2 rounded-full bg-gradient-to-b from-emerald-400 to-teal-400" />}
+        <Settings02 width={18} height={18} />
+        <span className="text-[10px] font-medium leading-none">Settings</span>
       </button>
     </aside>
   );

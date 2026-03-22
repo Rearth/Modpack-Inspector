@@ -6,6 +6,10 @@ export function BrowseForFolder() {
   return window['go']['main']['App']['BrowseForFolder']();
 }
 
+export function ClearLatestLogContent(arg1) {
+  return window['go']['main']['App']['ClearLatestLogContent'](arg1);
+}
+
 export function GetAbsoluteConfigPath(arg1) {
   return window['go']['main']['App']['GetAbsoluteConfigPath'](arg1);
 }
@@ -34,6 +38,10 @@ export function GetInstancesForSettings(arg1) {
   return window['go']['main']['App']['GetInstancesForSettings'](arg1);
 }
 
+export function GetLogsOverview() {
+  return window['go']['main']['App']['GetLogsOverview']();
+}
+
 export function GetMissingDependencies() {
   return window['go']['main']['App']['GetMissingDependencies']();
 }
@@ -60,6 +68,10 @@ export function GetUnusedLibraries() {
 
 export function ReadConfigFile(arg1) {
   return window['go']['main']['App']['ReadConfigFile'](arg1);
+}
+
+export function ReadInstanceTextFile(arg1) {
+  return window['go']['main']['App']['ReadInstanceTextFile'](arg1);
 }
 
 export function RemoveConfigOverride(arg1, arg2) {
@@ -92,4 +104,12 @@ export function SetConfigOverride(arg1, arg2) {
 
 export function SetLibraryOverride(arg1, arg2) {
   return window['go']['main']['App']['SetLibraryOverride'](arg1, arg2);
+}
+
+export function StartLiveLog(arg1) {
+  return window['go']['main']['App']['StartLiveLog'](arg1);
+}
+
+export function StopLiveLog() {
+  return window['go']['main']['App']['StopLiveLog']();
 }

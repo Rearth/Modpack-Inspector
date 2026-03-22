@@ -1,6 +1,8 @@
 {
     "chat.tools.terminal.autoApprove": {
         "go": true,
-        "gofmt": true
+        "gofmt": true,
+        "wails": true,
+        "npm run build": true
     }
 }

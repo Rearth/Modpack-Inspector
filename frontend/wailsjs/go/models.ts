@@ -249,6 +249,24 @@ export namespace main {
 	        this.targetMembers = source["targetMembers"];
 	    }
 	}
+	export class InstanceTextFile {
+	    name: string;
+	    relativePath: string;
+	    size: number;
+	    modifiedUnix: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new InstanceTextFile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.relativePath = source["relativePath"];
+	        this.size = source["size"];
+	        this.modifiedUnix = source["modifiedUnix"];
+	    }
+	}
 	export class LibraryDetectionDebug {
 	    detected: boolean;
 	    hasLibraryTag: boolean;
@@ -284,6 +302,44 @@ export namespace main {
 	        this.manualOverride = source["manualOverride"];
 	        this.reason = source["reason"];
 	    }
+	}
+	export class LogsOverview {
+	    available: boolean;
+	    defaultLiveLog: string;
+	    latestCrash?: InstanceTextFile;
+	    crashReports: InstanceTextFile[];
+	    logFiles: InstanceTextFile[];
+	
+	    static createFrom(source: any = {}) {
+	        return new LogsOverview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.defaultLiveLog = source["defaultLiveLog"];
+	        this.latestCrash = this.convertValues(source["latestCrash"], InstanceTextFile);
+	        this.crashReports = this.convertValues(source["crashReports"], InstanceTextFile);
+	        this.logFiles = this.convertValues(source["logFiles"], InstanceTextFile);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class MixinDetail {
 	    mixinClass: string;
@@ -387,6 +443,30 @@ export namespace main {
 	        this.iconURL = source["iconURL"];
 	        this.type = source["type"];
 	        this.via = source["via"];
+	    }
+	}
+	export class TextFileContent {
+	    name: string;
+	    relativePath: string;
+	    content: string;
+	    totalSize: number;
+	    modifiedUnix: number;
+	    truncated: boolean;
+	    missing: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TextFileContent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.relativePath = source["relativePath"];
+	        this.content = source["content"];
+	        this.totalSize = source["totalSize"];
+	        this.modifiedUnix = source["modifiedUnix"];
+	        this.truncated = source["truncated"];
+	        this.missing = source["missing"];
 	    }
 	}
 

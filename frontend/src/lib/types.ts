@@ -24,6 +24,34 @@ export interface UnresolvedExternalDependency {
 export type ConfigMapping = db.ConfigMapping;
 export type Settings = db.Settings;
 export type LibraryDetectionDebug = main.LibraryDetectionDebug;
+export interface InstanceTextFile {
+	name: string;
+	relativePath: string;
+	size: number;
+	modifiedUnix: number;
+}
+export interface LogsOverview {
+	available: boolean;
+	defaultLiveLog: string;
+	latestCrash?: InstanceTextFile;
+	crashReports: InstanceTextFile[];
+	logFiles: InstanceTextFile[];
+}
+export interface TextFileContent {
+	name: string;
+	relativePath: string;
+	content: string;
+	totalSize: number;
+	modifiedUnix: number;
+	truncated: boolean;
+	missing: boolean;
+}
+export interface LiveLogChunk {
+	relativePath: string;
+	content: string;
+	totalSize: number;
+	modifiedUnix: number;
+}
 export interface ModDetail {
 	mod: Mod;
 	dependencies: DetailDependency[];
@@ -60,4 +88,4 @@ export interface ReverseDep extends main.ReverseDep {
 	via?: string;
 }
 
-export type View = 'mods' | 'graph' | 'settings';
+export type View = 'mods' | 'graph' | 'logs' | 'settings';
