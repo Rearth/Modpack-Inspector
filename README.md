@@ -7,6 +7,8 @@ Use this tool at your own risk. Based on my testing, it does what's expected, bu
 
 > This does not mean my minecraft mods will be vibe coded from now on, I actually enjoy writing the java code.
 
+Also check out https://github.com/Kolterdyx/ModpackGraph & https://github.com/arcbra/ModPack-Dependency-Visualizer for some alternative modpack graph view if that's all you're looking for.
+
 ## Overview
 
 Modpack Inspector is a desktop application for inspecting and debugging Minecraft modpacks.
